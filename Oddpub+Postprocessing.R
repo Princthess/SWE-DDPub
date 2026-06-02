@@ -10,15 +10,24 @@
 # install.packages("stringr")
 
 # ── Add Poppler to PATH and load packages ─────────────────────────────────────
-Sys.setenv(PATH = paste("C:/poppler/poppler-25.12.0/Library/bin", Sys.getenv("PATH"), sep = ";"))
+# Mac users: install Poppler via Homebrew in the terminal: brew install poppler
+if (.Platform$OS.type == "windows") {
+  Sys.setenv(PATH = paste("C:/poppler/poppler-25.12.0/Library/bin", Sys.getenv("PATH"), sep = ";"))
+}
 
 library(oddpub)
 library(dplyr)
 library(stringr)
 
 # ── Set folders ────────────────────────────────────────────────────────────────
-pdf_folder  <- "C:/Users/thereset/Documents/OddPubTest/NyKorpus" # ⚠️ Change this
-output_path <- "C:/Users/thereset/Documents/OddPubTest/resultss.csv"   # ⚠️ Change this
+# Create these folders on your computer before running:
+#   ~/Desktop/oddpub/
+#   ~/Desktop/oddpub/pdfs/       ← put your PDF files here
+#   ~/Desktop/oddpub/results/    ← output CSV will be saved here
+# (~ resolves to your home directory on both Windows and Mac)
+
+pdf_folder  <- path.expand("~/Desktop/oddpub/pdfs")
+output_path <- path.expand("~/Desktop/oddpub/results/results.csv")
 
 # Convert PDFs to txt and run ODDPub
 oddpub::pdf_convert(pdf_folder, output_folder = pdf_folder)
@@ -62,28 +71,23 @@ results_extended <- results |>
     ),
     source_text = normalize_text(source_text_raw),
 
-    # ── All DOIs found (semicolon-separated) ──────────────────────────────────
-    extracted_dois_all = sapply(source_text, function(txt) {
-      if (is.na(txt)) return(NA_character_)
-      hits <- str_extract_all(txt, "10\\.\\d{4,}/[^\\s,);>\"']+")[[1]]
-      hits <- str_remove(hits, "[.,);>\"']+$")
-      hits <- unique(hits[nzchar(hits)])
-      if (length(hits) == 0) NA_character_ else paste(hits, collapse = "; ")
-    }),
-    extracted_doi = str_extract(extracted_dois_all, "^[^;]+") |> str_trim(),
-
-    # ── Fix for DOIs split across two-column PDF layouts (>10 char gap) ───────
-    # Looks for "orphan" DOI suffixes starting with known repository prefixes.
-    # Covers: SND (5878, 71870), Zenodo (5281), SciLifeLab (17044) and others.
-    orphan_doi_suffix = str_extract(
-      source_text,
-      "(?<![\\d/])(5878|71870|5281|17044|5334|6084|17632)/[^\\s,);>\"']+"
-    ),
-    reconstructed_doi = if_else(
-      is.na(extracted_doi) & !is.na(orphan_doi_suffix),
-      paste0("10.", str_remove(orphan_doi_suffix, "[.,);>\"']+$")),
-      NA_character_
-    ),
+    # ── DOI extraction (includes fix for two-column PDF split DOIs) ───────────
+    # First tries direct extraction; if none found, looks for orphan DOI suffixes
+    # from known repositories (SND: 5878/71870, Zenodo: 5281, SciLifeLab: 17044).
+    extracted_doi = {
+      direct <- str_extract(source_text, "10\\.\\d{4,}/[^\\s,);>\"']+") |>
+        str_remove("[.,);>\"']+$") |>
+        str_trim()
+      orphan <- str_extract(
+        source_text,
+        "(?<![\\d/])(5878|71870|5281|17044|5334|6084|17632)/[^\\s,);>\"']+"
+      )
+      if_else(
+        is.na(direct) & !is.na(orphan),
+        paste0("10.", str_remove(orphan, "[.,);>\"']+$")),
+        direct
+      )
+    },
 
     # ── Accession numbers ─────────────────────────────────────────────────────
     extracted_accession = str_extract(source_text, accession_pattern),
@@ -98,14 +102,6 @@ results_extended <- results |>
     # ── Repository match ──────────────────────────────────────────────────────
     matched_repository = str_extract(tolower(source_text), repo_pattern),
 
-    # ── Combined PID: DOI > reconstructed DOI > accession number > URL ────────
-    extracted_pid = coalesce(
-      extracted_doi,
-      reconstructed_doi,
-      extracted_accession,
-      extracted_url
-    ),
-
     # ── Corrected is_open_data flag ───────────────────────────────────────────
     # TRUE if ODDPub already flagged it, OR if:
     #   (a) a known repository + PID was found, OR
@@ -114,7 +110,7 @@ results_extended <- results |>
     is_open_data_corrected = is_open_data | (
       !is.na(matched_repository) &
       (
-        !is.na(extracted_pid) |
+        !is.na(extracted_doi) | !is.na(extracted_accession) | !is.na(extracted_url) |
         str_detect(tolower(coalesce(source_text_raw, "")),
                    "\\bavailable\\b|\\bdeposited\\b|\\baccessible\\b|\\bopenly\\b")
       ) &
@@ -128,6 +124,5 @@ results_extended <- results |>
 write.csv(results_extended, output_path, row.names = FALSE)
 
 message("Done! Results saved to: ", output_path)
-message("New columns: extracted_dois_all, extracted_doi, reconstructed_doi, ",
-        "extracted_accession, extracted_url, matched_repository, ",
-        "extracted_pid, is_open_data_corrected")
+message("Added columns: extracted_doi, extracted_accession, extracted_url, ",
+        "matched_repository, is_open_data_corrected")
