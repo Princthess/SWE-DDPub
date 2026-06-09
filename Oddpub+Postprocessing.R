@@ -1,19 +1,11 @@
 # ── Run once ───────────────────────────────────────────────────────────────────
-# STEP 1: Install Poppler (Windows)
-# Download from: https://github.com/oschwartz10612/poppler-windows/releases/
-# Unzip to C:/poppler/ — make sure the path below matches your version
-
-# STEP 2: Install R packages
-# install.packages("devtools")
-# devtools::install_github("quest-bih/oddpub")
+# STEP 1: Install R packages
+# install.packages("pak")
+# pak::pak("quest-bih/oddpub")
 # install.packages("dplyr")
 # install.packages("stringr")
 
-# ── Add Poppler to PATH and load packages ─────────────────────────────────────
-# Mac users: install Poppler via Homebrew in the terminal: brew install poppler
-if (.Platform$OS.type == "windows") {
-  Sys.setenv(PATH = paste("C:/poppler/poppler-25.12.0/Library/bin", Sys.getenv("PATH"), sep = ";"))
-}
+# ── Load packages ─────────────────────────────────────────────────────────────
 
 library(oddpub)
 library(dplyr)
