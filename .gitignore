@@ -8,9 +8,10 @@ renv/staging/
 .Rhistory
 .RData
 .Rproj.user/
-*.Rproj
 
-# Data (PDFs and results stay local)
-pdfs/
+# Data: keep the folder structure, ignore the actual PDFs, text, and results
+data/pdfs/*
+!data/pdfs/.gitkeep
+data/*.csv
+data/*.txt
 *.pdf
-results.csv

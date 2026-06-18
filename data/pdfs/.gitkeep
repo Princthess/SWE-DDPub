@@ -1,0 +1,2 @@
+# This empty file keeps the data/pdfs/ folder in git even when it has no PDFs.
+# Put your PDF files in this folder. They are git-ignored (not uploaded).
