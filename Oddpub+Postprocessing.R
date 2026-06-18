@@ -5,21 +5,20 @@
 # install.packages("dplyr")
 # install.packages("stringr")
 
+# ── Set folders ────────────────────────────────────────────────────────────────
+# Run these lines once to create the folder structure, then put your PDFs in pdfs/
+#dir.create(path.expand("~/oddpub-workshop/pdfs"),    recursive = TRUE, showWarnings = FALSE)
+#dir.create(path.expand("~/oddpub-workshop/results"), recursive = TRUE, showWarnings = FALSE)
+#message("Folders created at: ", path.expand("~/oddpub-workshop/"))
+
 # ── Load packages ─────────────────────────────────────────────────────────────
 
 library(oddpub)
 library(dplyr)
 library(stringr)
 
-# ── Set folders ────────────────────────────────────────────────────────────────
-# Create these folders on your computer before running:
-#   ~/Desktop/oddpub/
-#   ~/Desktop/oddpub/pdfs/       ← put your PDF files here
-#   ~/Desktop/oddpub/results/    ← output CSV will be saved here
-# (~ resolves to your home directory on both Windows and Mac)
-
-pdf_folder  <- path.expand("~/Desktop/oddpub/pdfs")
-output_path <- path.expand("~/Desktop/oddpub/results/results.csv")
+pdf_folder  <- path.expand("~/oddpub-workshop/pdfs")
+output_path <- path.expand("~/oddpub-workshop/results.csv")
 
 # Convert PDFs to txt and run ODDPub
 oddpub::pdf_convert(pdf_folder, output_folder = pdf_folder)
@@ -36,59 +35,79 @@ normalize_text <- function(text) {
 
 # ── Patterns ──────────────────────────────────────────────────────────────────
 repo_pattern <- paste(sep = "|",
-  "zenodo", "figshare", "dryad", "dataverse", "openneuro",
-  "open science framework", "\\bosf\\b", "mendeley data", "gigadb",
-  "swedish national data service", "snd\\.gu\\.se", "researchdata\\.se",
-  "scilifelab", "10\\.5878", "10\\.71870",
-  "european nucleotide archive", "\\bena\\b", "\\bpride\\b",
-  "proteomexchange", "gene expression omnibus", "\\bgeo\\b",
-  "github", "harvard dataverse"
+                      "zenodo", "figshare", "dryad", "dataverse", "openneuro",
+                      "open science framework", "\\bosf\\b", "mendeley data", "gigadb",
+                      "swedish national data service", "snd\\.gu\\.se", "researchdata\\.se",
+                      "scilifelab", "10\\.5878", "10\\.71870",
+                      "european nucleotide archive", "\\bena\\b", "\\bpride\\b",
+                      "proteomexchange", "gene expression omnibus", "\\bgeo\\b",
+                      "github", "harvard dataverse"
 )
 
 non_data_url_pattern <- "youtu\\.be|youtube\\.com|twitter\\.com|vimeo\\.com"
 
 accession_pattern <- paste(sep = "|",
-  "PRJ[EDNB]\\d+", "[EPS]-[A-Z]{4}-\\d+", "GSE\\d{2,}",
-  "PXD\\d{6}", "MTBLS\\d{2,}", "GCA_\\d{9}\\.\\d+", "SR[PRXSZ]\\d{3,}"
+                           "PRJ[EDNB]\\d+", "[EPS]-[A-Z]{4}-\\d+", "GSE\\d{2,}",
+                           "PXD\\d{6}", "MTBLS\\d{2,}", "GCA_\\d{9}\\.\\d+", "SR[PRXSZ]\\d{3,}"
 )
+
+# ── Helper: extract all matches and collapse to semicolon-separated string ─────
+extract_all_collapse <- function(text, pattern) {
+  str_extract_all(text, pattern) |>
+    lapply(function(x) {
+      x <- str_remove(x, "[.,);>\"'\\]]+$") |> str_trim()
+      x <- x[x != ""]
+      if (length(x) == 0) NA_character_ else paste(unique(x), collapse = "; ")
+    }) |>
+    unlist()
+}
 
 # ── Post-processing ───────────────────────────────────────────────────────────
 results_extended <- results |>
   mutate(
     source_text_raw = coalesce(
       if_else(nchar(trimws(open_data_statements)) > 0, open_data_statements, NA_character_),
-      if_else(nchar(trimws(das))                  > 0, das,                  NA_character_),
       if_else(nchar(trimws(open_code_statements)) > 0, open_code_statements, NA_character_),
-      if_else(nchar(trimws(cas))                  > 0, cas,                  NA_character_)
+      if_else(nchar(trimws(as.character(cas)))    > 0, as.character(cas),    NA_character_)
     ),
     source_text = normalize_text(source_text_raw),
 
     # ── DOI extraction (includes fix for two-column PDF split DOIs) ───────────
-    # First tries direct extraction; if none found, looks for orphan DOI suffixes
+    # Extracts all DOIs; if none found directly, looks for orphan suffixes
     # from known repositories (SND: 5878/71870, Zenodo: 5281, SciLifeLab: 17044).
     extracted_doi = {
-      direct <- str_extract(source_text, "10\\.\\d{4,}/[^\\s,);>\"']+") |>
-        str_remove("[.,);>\"']+$") |>
-        str_trim()
-      orphan <- str_extract(
+      direct <- str_extract_all(source_text, "10\\.\\d{4,}/[^\\s,);>\"']+") |>
+        lapply(function(x) {
+          x <- str_remove(x, "[.,);>\"'\\]]+$") |> str_trim()
+          x[x != ""]
+        })
+
+      orphan <- str_extract_all(
         source_text,
         "(?<![\\d/])(5878|71870|5281|17044|5334|6084|17632)/[^\\s,);>\"']+"
-      )
-      if_else(
-        is.na(direct) & !is.na(orphan),
-        paste0("10.", str_remove(orphan, "[.,);>\"']+$")),
-        direct
-      )
+      ) |>
+        lapply(function(x) paste0("10.", str_remove(x, "[.,);>\"'\\]]+$")))
+
+      mapply(function(d, o) {
+        combined <- if (length(d) == 0) o else d
+        if (length(combined) == 0) NA_character_
+        else paste(unique(combined), collapse = "; ")
+      }, direct, orphan, SIMPLIFY = TRUE)
     },
 
     # ── Accession numbers ─────────────────────────────────────────────────────
-    extracted_accession = str_extract(source_text, accession_pattern),
+    extracted_accession = extract_all_collapse(source_text, accession_pattern),
 
     # ── URLs (excluding DOIs and video links) ─────────────────────────────────
     extracted_url = {
-      u <- str_extract(source_text, "https?://(?!doi\\.org)[^\\s,);>\"']+") |>
-        str_remove("[.,);>\"']+$")
-      if_else(str_detect(coalesce(u, ""), non_data_url_pattern), NA_character_, u)
+      str_extract_all(source_text, "https?://(?!doi\\.org)[^\\s,);>\"']+") |>
+        lapply(function(x) {
+          x <- str_remove(x, "[.,);>\"'\\]]+$")
+          x <- x[!str_detect(x, non_data_url_pattern)]
+          x <- x[x != ""]
+          if (length(x) == 0) NA_character_ else paste(unique(x), collapse = "; ")
+        }) |>
+        unlist()
     },
 
     # ── Repository match ──────────────────────────────────────────────────────
@@ -101,13 +120,13 @@ results_extended <- results |>
     # ...and the text is not exclusively about "upon request"
     is_open_data_corrected = is_open_data | (
       !is.na(matched_repository) &
-      (
-        !is.na(extracted_doi) | !is.na(extracted_accession) | !is.na(extracted_url) |
-        str_detect(tolower(coalesce(source_text_raw, "")),
-                   "\\bavailable\\b|\\bdeposited\\b|\\baccessible\\b|\\bopenly\\b")
-      ) &
-      !str_detect(tolower(coalesce(source_text_raw, "")),
-                  "^(upon request|on request|not available|not provided)")
+        (
+          !is.na(extracted_doi) | !is.na(extracted_accession) | !is.na(extracted_url) |
+            str_detect(tolower(coalesce(source_text_raw, "")),
+                       "\\bavailable\\b|\\bdeposited\\b|\\baccessible\\b|\\bopenly\\b")
+        ) &
+        !str_detect(tolower(coalesce(source_text_raw, "")),
+                    "^(upon request|on request|not available|not provided)")
     )
   ) |>
   select(-source_text_raw)
