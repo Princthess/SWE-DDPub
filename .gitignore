@@ -1,0 +1,16 @@
+# renv: ignore the installed library, keep the lockfile
+renv/library/
+renv/local/
+renv/cellar/
+renv/staging/
+
+# R session artefacts
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# Data (PDFs and results stay local)
+pdfs/
+*.pdf
+results.csv

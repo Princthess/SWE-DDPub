@@ -1,15 +1,15 @@
-# ── Run once ───────────────────────────────────────────────────────────────────
-# STEP 1: Install R packages
-# install.packages("pak")
-# pak::pak("quest-bih/oddpub")
-# install.packages("dplyr")
-# install.packages("stringr")
+# ── First-time setup ─────────────────────────────────────────────────────────
+# STEP 1: Install the exact package versions this project was built with.
+#   Open restore.R and run it (it calls renv::restore()), OR run:
+#     renv::restore()
+#   Do NOT install packages manually with install.packages()/pak — that would
+#   pull newer versions and break reproducibility. See README.md.
 
 # ── Set folders ────────────────────────────────────────────────────────────────
-# Run these lines once to create the folder structure, then put your PDFs in pdfs/
-#dir.create(path.expand("~/oddpub-workshop/pdfs"),    recursive = TRUE, showWarnings = FALSE)
-#dir.create(path.expand("~/oddpub-workshop/results"), recursive = TRUE, showWarnings = FALSE)
-#message("Folders created at: ", path.expand("~/oddpub-workshop/"))
+# STEP 2: Run this line once to create the input folder, then put your PDFs in it.
+# (The output file results.csv is written into ~/oddpub-workshop/ automatically.)
+#dir.create(path.expand("~/oddpub-workshop/pdfs"), recursive = TRUE, showWarnings = FALSE)
+#message("Folder created at: ", path.expand("~/oddpub-workshop/pdfs"))
 
 # ── Load packages ─────────────────────────────────────────────────────────────
 
