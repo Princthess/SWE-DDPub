@@ -37,11 +37,21 @@ pdf_text <- oddpub::pdf_load(pdf_folder)
 results  <- oddpub::open_data_search(pdf_text)
 
 # ── Helper function: normalise PDF artefacts (line-break splits) ───────────────
+# Re-joins DOIs and URLs that a PDF broke across a line. The URL rejoin is
+# deliberately conservative: an earlier version glued ANY whitespace after a URL
+# to the next token, which welded complete URLs onto following prose (e.g.
+# "https://snd.gu.se/en acknowledgments:" -> "https://snd.gu.se/enacknowledgments:").
+# We now only rejoin when the break looks like a genuine URL continuation.
 normalize_text <- function(text) {
   text |>
     str_replace_all("\\b(10\\.?)\\s+(\\d{4,}/)", "\\1\\2") |>
     str_replace_all("(10\\.\\d{4,}/[^\\s]{2,20})\\s+([^\\s,);>\"']{3,})", "\\1\\2") |>
-    str_replace_all("(https?://[^\\s]{3,50})\\s+([^\\s,);>\"']{3,})", "\\1\\2")
+    # (a) first fragment ends in a URL-structural char, so a path clearly continues
+    #     (e.g. ".../ena/" + "browser/..." -> ".../ena/browser/...")
+    str_replace_all("(https?://[^\\s]{3,80}[/.=?&#_-])\\s+([^\\s,);>\"']{2,})", "\\1\\2") |>
+    # (b) the continuation itself starts with a URL-structural char
+    #     (e.g. "https://zenodo" + ".org/records/..." -> "https://zenodo.org/records/...")
+    str_replace_all("(https?://[^\\s]{3,80})\\s+([./?#&=][^\\s,);>\"']{1,})", "\\1\\2")
 }
 
 # ── Patterns ──────────────────────────────────────────────────────────────────
