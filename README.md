@@ -25,6 +25,10 @@ Runs ODDPub on a folder of PDFs and post-processes the output to extract:
 
 ## Setup
 
+```sh
+git clone https://github.com/Princthess/Oddpub-postprocessing.git
+```
+
 1. Open **`Oddpub-postprocessing.Rproj`** in RStudio. This sets the working
    directory to the project root and activates renv.
 2. Run `restore.R` (`renv::restore()`) to install the locked package versions.

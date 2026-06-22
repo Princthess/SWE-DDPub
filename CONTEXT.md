@@ -28,14 +28,16 @@ Oddpub-postprocessing/
 │   └── (results.csv written to data/)
 ├── renv.lock + renv/ + .Rprofile # reproducibility (renv)
 ├── setup.R / restore.R           # regenerate / restore packages
-├── README.md, push.md, CONTEXT.md
+├── README.md, CONTEXT.md
+├── noobreadme.md                 # private, git-ignored: beginner guide + git cheat-sheet
 └── .gitignore
 ```
 
 - **Reproducibility:** renv pins all packages incl. `oddpub` at a GitHub commit.
   New machine → open `.Rproj`, run `restore.R`. R 4.5.2.
 - **Git:** private repo https://github.com/Princthess/Oddpub-postprocessing
-  (HTTPS, credentials cached). `push.md` is the git cheat-sheet.
+  (HTTPS, credentials cached). Git cheat-sheet lives in the git-ignored
+  `noobreadme.md` (personal, not published).
 - **Detection patterns** live near the top of the main script: `repo_pattern`,
   `accession_pattern`, orphan-DOI prefix list, and Swedish availability terms.
 
