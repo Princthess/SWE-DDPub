@@ -11,6 +11,7 @@ renv/staging/
 
 # Private/personal notes — never publish
 noobreadme.md
+CONTEXT.md
 
 # Data: keep the folder structure, ignore the actual PDFs, text, and results
 data/pdfs/*
