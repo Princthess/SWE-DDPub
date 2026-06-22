@@ -1,104 +1,57 @@
 # Oddpub-postprocessing
 
 R script for extracting persistent identifiers (DOIs, accession numbers, URLs)
-and repository mentions from Data Availability Statements in academic publications,
-built on top of [ODDPub](https://github.com/quest-bih/oddpub).
+and repository mentions from Data Availability Statements in academic
+publications, built on top of [ODDPub](https://github.com/quest-bih/oddpub).
 
 ## What it does
 
 Runs ODDPub on a folder of PDFs and post-processes the output to extract:
+
 - DOIs (including reconstruction of DOIs split across two-column PDF layouts)
-- Accession numbers (e.g. GSE*, PXD*, PRJNA*)
+- Accession numbers (e.g. `GSE*`, `PXD*`, `PRJNA*`)
 - Non-DOI URLs
 - Repository name (Zenodo, Figshare, SND, Dryad, OSF, etc.)
 - A corrected `is_open_data` flag that catches cases ODDPub misses
 
----
+## Requirements
 
-## Setting up on a new machine (or after reinstalling R)
+- R and RStudio
+- **Poppler** (PDF text extraction): Windows — unzip
+  [poppler-windows](https://github.com/oschwartz10612/poppler-windows/releases)
+  and add its `Library/bin` to PATH; macOS — `brew install poppler`
+- Packages are pinned via [renv](https://rstudio.github.io/renv/) — do not
+  install them manually.
 
-Do this when: you have a new PC, reinstalled R, or are otherwise starting fresh.
+## Setup
 
-**1. Install system dependencies**
+1. Open **`Oddpub-postprocessing.Rproj`** in RStudio. This sets the working
+   directory to the project root and activates renv.
+2. Run `restore.R` (`renv::restore()`) to install the locked package versions.
 
-- **R**: [cran.r-project.org](https://cran.r-project.org)
-- **RStudio**: [posit.co/download/rstudio-desktop](https://posit.co/download/rstudio-desktop)
-- **Poppler** (needed to read PDFs):
-  - Windows: download from [github.com/oschwartz10612/poppler-windows/releases](https://github.com/oschwartz10612/poppler-windows/releases), unzip to `C:/poppler/` and add `C:/poppler/Library/bin` to your PATH
-  - Mac: `brew install poppler`
+## Usage
 
-**2. Restore R packages**
+- **Input:** place PDFs in `data/pdfs/`.
+- **Run:** source `Oddpub+Postprocessing.R`.
+- **Output:** `data/results.csv`, one row per article.
 
-Open `restore.R` in RStudio and run it. This reads `renv.lock` and installs every package at the exact recorded version. Done.
+PDFs, intermediate `.txt`, and `results.csv` are git-ignored and stay local.
+Note that ODDPub runs on the order of ~20 s per paper.
 
-```r
-# restore.R does this:
-renv::restore()
-```
+## renv maintenance
 
-> **Rtools warning on Windows?** You may see "Rtools is required to build R packages."
-> It's usually harmless — packages install as pre-built binaries from Posit Package
-> Manager, so no compilation is needed. Only install [Rtools](https://cran.r-project.org/bin/windows/Rtools/)
-> if `restore()` actually fails on a package that must build from source.
+- `renv::status()` — check whether the library matches `renv.lock`.
+- `renv::restore()` — reinstall the locked versions.
+- `renv::snapshot()` — record an intentional package update, then commit `renv.lock`.
 
-**3. Open the project the right way**
+## Version control
 
-Double-click **`Oddpub-postprocessing.Rproj`** to open it in RStudio (or File → Open Project). This does two important things automatically:
-- sets the working directory to the project root, so the script's paths work
-- activates renv, so you get the exact locked package versions
+Tracked: the script, docs, `.Rproj`, `.Rprofile`, `renv.lock`, the renv
+infrastructure files (`renv/activate.R`, `renv/settings.json`, `renv/.gitignore`),
+`setup.R`/`restore.R`, and `data/pdfs/.gitkeep`.
 
-> Don't just open the `.R` file on its own — open the `.Rproj` so renv and the paths are set up correctly.
-
-**4. Put your PDFs in `data/pdfs/` and run `Oddpub+Postprocessing.R`**
-
-- **Input:** drop your PDF files into the `data/pdfs/` folder (inside the project).
-- **Output:** the script writes `data/results.csv` (one row per article).
-
-Your PDFs and results stay on your machine — they're git-ignored, so they never get uploaded to GitHub.
-
----
-
-## Keeping the lockfile up to date
-
-Do this when: you've intentionally updated a package (e.g. a new version of oddpub) and want to save that update for the future.
-
-```r
-renv::snapshot()
-```
-
-Then back up / commit the updated `renv.lock`.
-
----
-
-## Not sure what state you're in?
-
-Run this to see if your installed packages match the lockfile:
-
-```r
-renv::status()
-```
-
-- **"No issues"** → nothing to do, just run the main script.
-- **"Out of sync"** → run `renv::restore()` to get back to the locked versions, or `renv::snapshot()` if you deliberately updated something.
-
----
-
-## What to back up / commit to GitHub
-
-| File | Keep? | Why |
-|---|---|---|
-| `renv.lock` | ✅ Yes | Records exact package versions — this is the whole point |
-| `Oddpub-postprocessing.Rproj` | ✅ Yes | The RStudio project file — open this to work on the project |
-| `.Rprofile` | ✅ Yes | Auto-activates renv when the project opens |
-| `renv/activate.R` | ✅ Yes | The activation script `.Rprofile` runs |
-| `renv/settings.json` | ✅ Yes | renv's project settings |
-| `renv/.gitignore` | ✅ Yes | Tells git to ignore the library folder |
-| `setup.R` / `restore.R` | ✅ Yes | The setup/restore helper scripts |
-| `data/pdfs/.gitkeep` | ✅ Yes | Keeps the (empty) input folder in the repo |
-| `renv/library/` | ❌ No | The actual installed packages — large, machine-specific, regenerated by `restore()` |
-| `data/` PDFs, `.txt`, `results.csv` | ❌ No | Your corpus and outputs stay local (git-ignored) |
-
----
+Ignored: `renv/library/` (large, machine-specific, rebuilt by `restore()`) and
+everything under `data/` except `.gitkeep` (your corpus and outputs).
 
 ## Output columns
 
@@ -110,31 +63,27 @@ All original ODDPub columns are retained. Added columns:
 | `extracted_accession` | Accession number found in DAS |
 | `extracted_url` | Non-DOI URL found in DAS |
 | `matched_repository` | Repository name matched from known list |
-| `is_open_data_corrected` | Corrected open data flag (extends ODDPub's detection) |
-
----
+| `is_open_data_corrected` | Corrected open-data flag (extends ODDPub's detection) |
 
 ## Repositories & identifiers covered
 
-The post-processing recognises the repositories and identifier formats below.
-It is tuned for the **Swedish research landscape** in addition to the major
-international archives. To extend it, edit `repo_pattern`, `accession_pattern`,
-or the orphan-DOI prefix list near the top of `Oddpub+Postprocessing.R`.
+Tuned for the Swedish research landscape alongside the major international
+archives. To extend coverage, edit `repo_pattern`, `accession_pattern`, or the
+orphan-DOI prefix list near the top of `Oddpub+Postprocessing.R`.
 
-**Swedish / Nordic repositories & infrastructures**
+**Swedish / Nordic**
 
 | Repository | Matched by |
 |---|---|
 | Swedish National Data Service (SND / DORIS) | name, `snd.se`, `snd.gu.se`, `researchdata.se`, DOI `10.5878` |
 | SciLifeLab Data Repository | name, DOI `10.17044` |
-| Bolin Centre Database (climate) | name, DOI `10.25504` |
-| ICOS Carbon Portal (carbon/climate, Lund) | name, `ICOS`, DOI `10.18160` |
+| Bolin Centre Database | name, DOI `10.25504` |
+| ICOS Carbon Portal | name, `ICOS`, DOI `10.18160` |
 
-> Most Swedish universities (SLU, Lund, KTH, GU, **Chalmers**) deposit data
-> *through* SND/DORIS rather than running their own repository, so SND coverage
-> already catches the bulk of Swedish institutional data.
+Most Swedish universities deposit through SND/DORIS rather than running their
+own repository, so SND coverage catches the bulk of institutional data.
 
-**International repositories**
+**International**
 
 Zenodo (`10.5281`), Figshare (`10.6084`), Dryad (`10.5061`), Mendeley Data
 (`10.17632`), OSF (`10.17605`), Harvard Dataverse (`10.7910`), GigaDB,
@@ -147,24 +96,17 @@ OpenNeuro, GitHub, GBIF (`10.15468`).
 | EGA (controlled-access human data) | `EGAS…`, `EGAD…` |
 | ENA / GenBank BioProject | `PRJEB…`, `PRJNA…` |
 | BioSample | `SAMEA…`, `SAMN…` |
-| GEO (gene expression) | `GSE…` |
+| GEO | `GSE…` |
 | PRIDE / ProteomeXchange | `PXD…` |
 | MetaboLights | `MTBLS…` |
 | ArrayExpress / BioStudies | `E-MTAB-…`, `S-BSST…` |
 | SRA / GenBank assembly | `SRR…`, `GCA_…` |
 
-Data-availability statements written in **Swedish** are also recognised
-(e.g. *tillgänglig*, *deponerad*).
-
----
+Swedish-language availability statements (e.g. *tillgänglig*, *deponerad*) are
+also recognised.
 
 ## License
 
-GNU Affero General Public License v3.0 — see [LICENSE](LICENSE).
-
-This script depends on [ODDPub](https://github.com/quest-bih/oddpub)
-(AGPL-3.0, © QUEST Center, Berlin Institute of Health).
-
-## Acknowledgements
-
-Script developed with assistance from Claude Sonnet 4.6 (Anthropic), June 2026.
+GNU Affero General Public License v3.0 — see [LICENSE](LICENSE). Depends on
+[ODDPub](https://github.com/quest-bih/oddpub) (AGPL-3.0, © QUEST Center, Berlin
+Institute of Health).

@@ -9,6 +9,9 @@ renv/staging/
 .RData
 .Rproj.user/
 
+# Private/personal notes — never publish
+noobreadme.md
+
 # Data: keep the folder structure, ignore the actual PDFs, text, and results
 data/pdfs/*
 !data/pdfs/.gitkeep

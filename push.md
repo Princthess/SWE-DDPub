@@ -1,66 +1,34 @@
-# Git cheat-sheet
+# Git reference
 
-Quick commands for getting this project onto GitHub and keeping it updated.
-Run them in **PowerShell** or **Git Bash**, from inside the project folder.
+Commands for syncing this project with GitHub. Run from the project root in
+PowerShell or Git Bash.
 
-```powershell
-cd "C:\Users\thereset\Documents\Oddpub-postprocessing"
-```
+## Clone (new machine)
 
----
-
-## First-time setup (only once, on this machine)
-
-Connects this folder to the GitHub repo and uploads everything.
-
-```powershell
-git remote add origin https://github.com/Princthess/Oddpub-postprocessing.git
-git fetch origin
-git reset --soft origin/main
-git commit -m "Add renv lockfile and reproducibility setup"
-git push origin main
-```
-
-> A browser window opens the first time to sign in to GitHub. Sign in once;
-> it's remembered after that.
-
----
-
-## Everyday updates (every time after that)
-
-Whenever you change the script, the README, or run `renv::snapshot()`:
-
-```powershell
-git add -A
-git commit -m "describe what you changed"
-git push
-```
-
----
-
-## Useful checks
-
-```powershell
-git status        # what's changed but not yet committed
-git log --oneline # history of your commits
-```
-
----
-
-## Setting up on a brand-new computer
-
-```powershell
+```sh
 git clone https://github.com/Princthess/Oddpub-postprocessing.git
 cd Oddpub-postprocessing
 ```
 
-Then open `restore.R` in RStudio and run it (see README.md).
+Then run `restore.R` in RStudio (see [README.md](README.md)).
 
----
+## Everyday updates
+
+```sh
+git add -A
+git commit -m "describe what changed"
+git push
+```
+
+## Checks
+
+```sh
+git status        # uncommitted changes
+git log --oneline # commit history
+git remote -v     # configured remotes
+```
 
 ## What gets uploaded
 
-Everything in the folder **except** what's listed in `.gitignore`:
-`renv/library/` (the installed packages — huge, rebuilt by `restore.R`),
-your PDFs, and `results.csv`. You don't have to manage this — it's automatic.
-```
+Everything except the patterns in `.gitignore`: `renv/library/` (rebuilt by
+`restore.R`), all PDFs/`.txt`, and `results.csv`. This is automatic.

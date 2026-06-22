@@ -1,17 +1,9 @@
-# ── First-time setup ─────────────────────────────────────────────────────────
-# STEP 1: Install the exact package versions this project was built with.
-#   Open restore.R and run it (it calls renv::restore()), OR run:
-#     renv::restore()
-#   Do NOT install packages manually with install.packages()/pak — that would
-#   pull newer versions and break reproducibility. See README.md.
-
-# ── STEP 2: PDFs ──────────────────────────────────────────────────────────────
-# Put your PDF files in the project's   data/pdfs/   folder (it already exists).
-# The results are written to            data/results.csv .
+# Oddpub-postprocessing: run ODDPub on PDFs in data/pdfs/ and extract DOIs,
+# accessions, URLs and repository mentions to data/results.csv.
 #
-# IMPORTANT: open this project by double-clicking  Oddpub-postprocessing.Rproj
-# in RStudio. That sets the working directory to the project root (so the paths
-# below work) AND activates renv (so you get the exact locked package versions).
+# Setup: open Oddpub-postprocessing.Rproj in RStudio (sets the wd + activates
+# renv), then run restore.R. Packages are pinned via renv — do not install them
+# manually. See README.md for details.
 
 # ── Load packages ─────────────────────────────────────────────────────────────
 
@@ -19,12 +11,11 @@ library(oddpub)
 library(dplyr)
 library(stringr)
 
-# Paths are relative to the project root (see the note above about the .Rproj file).
+# Paths are relative to the project root (the .Rproj sets the working directory).
 pdf_folder  <- "data/pdfs"
 output_path <- "data/results.csv"
 
-# Safety check: make sure we're running from the project root, then ensure the
-# input folder exists. If this stops, open Oddpub-postprocessing.Rproj first.
+# Guard against running from the wrong working directory.
 if (!file.exists("renv.lock")) {
   stop("Working directory is not the project root. Open ",
        "Oddpub-postprocessing.Rproj in RStudio, then run this script again.")
