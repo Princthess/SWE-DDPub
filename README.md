@@ -4,6 +4,8 @@ R script for extracting persistent identifiers (DOIs, accession numbers, URLs)
 and repository mentions from Data Availability Statements in academic
 publications, built on top of [ODDPub](https://github.com/quest-bih/oddpub).
 
+> ⚠️ Vibe-coded with [Claude Code](https://claude.com/claude-code). Heuristic — sanity-check the output.
+
 ## What it does
 
 Runs ODDPub on a folder of PDFs and post-processes the output to extract:
@@ -114,13 +116,3 @@ also recognised.
 GNU Affero General Public License v3.0 — see [LICENSE](LICENSE). Depends on
 [ODDPub](https://github.com/quest-bih/oddpub) (AGPL-3.0, © QUEST Center, Berlin
 Institute of Health).
-
-## Disclaimer
-
-This post-processing layer was vibe-coded with
-[Claude Code](https://claude.com/claude-code) — lots of "try this regex / no wait,
-that one" until the edge cases stopped fighting back. The detection logic is
-heuristic and PDFs are gloriously chaotic, so treat the output as a well-informed
-first pass, not gospel: spot-check anything you're about to report or publish.
-(The underlying [ODDPub](https://github.com/quest-bih/oddpub) engine is the real,
-peer-reviewed science; the extras here are pragmatic glue.)
