@@ -6,7 +6,9 @@ URLs) and repository mentions from Data Availability Statements in academic
 publications, built on top of [ODDPub](https://github.com/quest-bih/oddpub) and
 tuned for the Swedish research landscape.
 
-> ⚠️ Vibe-coded with [Claude Code](https://claude.com/claude-code). Heuristic — sanity-check the output.
+> 🚧 **Status: experimental, work in progress (pre-1.0).** Vibe-coded with
+> [Claude Code](https://claude.com/claude-code) and not yet peer-reviewed — the
+> output is heuristic, so verify anything important before relying on it.
 
 ## What it does
 
