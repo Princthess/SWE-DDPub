@@ -46,6 +46,16 @@ normalize_text <- function(text) {
 }
 
 # ── Patterns ──────────────────────────────────────────────────────────────────
+# ODDPub lower-cases the statement text, which makes the short repository
+# acronyms (ENA / GEO / EGA) collide with ordinary words — notably Swedish
+# "ena" ("one"/"the one"). Only count these as a repository hit when an
+# accession, identifier, or repo-context word sits immediately after them.
+repo_acronym_ctx <- paste0(
+  "(?=[^a-z0-9]{0,4}",
+  "(\\d|gse|gsm|prj|sam|pxd|mtbls|sr[prxsz]|",
+  "accession|database|archive|repositor|portal|deposit|browser|study|under|:))"
+)
+
 repo_pattern <- paste(sep = "|",
                       # ── General / international repositories ──────────────
                       "zenodo", "figshare", "dryad", "dataverse", "openneuro",
@@ -58,13 +68,41 @@ repo_pattern <- paste(sep = "|",
                       "bolin\\s+centre", "10\\.25504",
                       "integrated carbon observation", "\\bicos\\b", "10\\.18160",
                       # ── Life-science / sequence & omics archives ──────────
-                      "european nucleotide archive", "\\bena\\b", "\\bpride\\b",
-                      "proteomexchange", "gene expression omnibus", "\\bgeo\\b",
-                      "european genome-?phenome archive", "\\bega\\b",
-                      "global biodiversity", "\\bgbif\\b"
+                      # Long-forms match unconditionally; the ambiguous acronyms
+                      # require a disambiguating neighbour (see repo_acronym_ctx).
+                      "european nucleotide archive", paste0("\\bena\\b", repo_acronym_ctx),
+                      "\\bpride\\b", "proteomexchange",
+                      "gene expression omnibus", paste0("\\bgeo\\b", repo_acronym_ctx),
+                      "european genome-?phenome archive", paste0("\\bega\\b", repo_acronym_ctx),
+                      "global biodiversity", "\\bgbif\\b",
+                      # ── Data journals ─────────────────────────────────────
+                      # A DAS that points to a data paper (a dataset published in
+                      # a data journal) is itself an open-data signal. Matched by
+                      # the journal's DOI prefix. Mirrors ODDPub's data_journal_dois.
+                      "10\\.3390/data", "10\\.1016/j\\.dib", "10\\.1038/s41597",
+                      "10\\.3897/bdj\\.", "10\\.1016/j\\.cdc\\.", "10\\.5194/essd",
+                      "10\\.1002/gdj3", "10\\.1016/j\\.gdata", "10\\.5334/jo\\.d\\.",
+                      "10\\.5334/ojb\\.", "10\\.1107/s2414314624", "10\\.1021/acs\\.jced",
+                      "10\\.1163/24523666-bja", "10\\.18174/odjar"
 )
 
 non_data_url_pattern <- "youtu\\.be|youtube\\.com|twitter\\.com|vimeo\\.com"
+
+# Phrases that signal data is NOT openly available — restricted, on-request, or
+# absent. Used to veto our own open-data upgrade (ODDPub's own TRUE still wins).
+# Unanchored (the earlier "^..." version only caught statements that *started*
+# with the phrase, missing the common "...available from the corresponding
+# author upon reasonable request"). Mirrors ODDPub's upon_request/not_available
+# lists, plus Swedish (\u escapes so file encoding can't break the match).
+restricted_pattern <- paste(sep = "|",
+  "(up)?on (reasonable )?request", "by request", "can be requested",
+  "available (from|on request from)( the)? (corresponding|lead) (author|contact)",
+  "from the (corresponding|lead) (author|contact)",
+  "bona fide research", "without undue reservation",
+  "(upon|after) (reasonable )?approval",
+  "not (publicly )?available", "not provided", "not (been )?deposited",
+  "p\\u00e5 beg\\u00e4ran", "vid f\\u00f6rfr\\u00e5gan", "efter (rimlig )?beg\\u00e4ran"
+)
 
 accession_pattern <- paste(sep = "|",
                            "PRJ[A-Z]{2}\\d+", "SAM[END]A?\\d{4,}",       # BioProject / BioSample
@@ -154,24 +192,27 @@ results_extended <- results |>
     matched_repository = str_extract(tolower(source_text), repo_pattern),
 
     # ── Corrected is_open_data flag ───────────────────────────────────────────
-    # TRUE if ODDPub already flagged it, OR if:
-    #   (a) a known repository + PID was found, OR
-    #   (b) a known repository + "available/deposited/accessible" in the text
-    # ...and the text is not exclusively about "upon request"
+    # TRUE if ODDPub already flagged it, OR a known repository is named AND:
+    #   (a) a concrete identifier (DOI / accession / URL) was extracted — strong
+    #       evidence of an actual open deposit, so an "on request" phrase
+    #       elsewhere (often ODDPub merging body text into the statement) does
+    #       NOT veto it; OR
+    #   (b) only a vague availability word is present (no identifier) — weaker,
+    #       so it counts only if the text does not signal restricted / on-request
+    #       / absent data (see restricted_pattern).
     is_open_data_corrected = is_open_data | (
-      !is.na(matched_repository) &
-        (
-          !is.na(extracted_doi) | !is.na(extracted_accession) | !is.na(extracted_url) |
+      !is.na(matched_repository) & (
+        (!is.na(extracted_doi) | !is.na(extracted_accession) | !is.na(extracted_url)) |
+          (
             str_detect(tolower(coalesce(source_text_raw, "")),
                        paste0("\\bavailable\\b|\\bdeposited\\b|\\baccessible\\b|\\bopenly\\b",
                               # Swedish: tillganglig / deponerad / nedladdningsbar
                               # (a-ring/a-umlaut/o-umlaut written as \\u escapes so the
                               #  file's text encoding can never break the match)
-                              "|tillg\\u00e4nglig|deponerad|nedladdningsbar"))
-        ) &
-        !str_detect(tolower(coalesce(source_text_raw, "")),
-                    paste0("^(upon request|on request|not available|not provided",
-                           "|p\\u00e5 beg\\u00e4ran|vid f\\u00f6rfr\\u00e5gan)"))
+                              "|tillg\\u00e4nglig|deponerad|nedladdningsbar")) &
+              !str_detect(tolower(coalesce(source_text_raw, "")), restricted_pattern)
+          )
+      )
     )
   ) |>
   select(-source_text_raw)
