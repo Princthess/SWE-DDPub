@@ -38,7 +38,7 @@ git clone https://github.com/Princthess/Oddpub-postprocessing.git
 ## Usage
 
 - **Input:** place PDFs in `data/pdfs/`.
-- **Run:** source `Oddpub+Postprocessing.R`.
+- **Run:** source `oddpub-swextract.R`.
 - **Output:** `data/results.csv`, one row per article.
 
 PDFs, intermediate `.txt`, and `results.csv` are git-ignored and stay local.
@@ -75,7 +75,7 @@ All original ODDPub columns are retained. Added columns:
 
 Tuned for the Swedish research landscape alongside the major international
 archives. To extend coverage, edit `repo_pattern`, `accession_pattern`, or the
-orphan-DOI prefix list near the top of `Oddpub+Postprocessing.R`.
+orphan-DOI prefix list near the top of `oddpub-swextract.R`.
 
 **Swedish / Nordic**
 
