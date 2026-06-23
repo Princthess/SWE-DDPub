@@ -1,14 +1,13 @@
 # SWE-DDPub
 
-**SWE-DDPub** (`SWE` + `DDPub` — Swedish **D**ata **D**etection in **Pub**lications)
+**SWE-DDPub** (`SWE` + `[O]DDPub`)
 is an R script for extracting persistent identifiers (DOIs, accession numbers,
 URLs) and repository mentions from Data Availability Statements in academic
 publications, built on top of [ODDPub](https://github.com/quest-bih/oddpub) and
 tuned for the Swedish research landscape.
 
 > 🚧 **Status: experimental, work in progress (pre-1.0).** Vibe-coded with
-> [Claude Code](https://claude.com/claude-code) and not yet peer-reviewed — the
-> output is heuristic, so verify anything important before relying on it.
+> [Claude Code](https://claude.com/claude-code).
 
 ## What it does
 
