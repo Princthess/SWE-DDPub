@@ -5,4 +5,4 @@ if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv")
 
 renv::restore()
 
-message("All packages restored. You can now run oddpub-swextract.R.")
+message("All packages restored. You can now run sweddpub.R.")

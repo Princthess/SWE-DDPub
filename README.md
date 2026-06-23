@@ -1,8 +1,10 @@
 # Oddpub-postprocessing
 
-R script for extracting persistent identifiers (DOIs, accession numbers, URLs)
-and repository mentions from Data Availability Statements in academic
-publications, built on top of [ODDPub](https://github.com/quest-bih/oddpub).
+**SWEDDPub** (`SWE` + `DDPub` — Swedish **D**ata **D**etection in **Pub**lications)
+is an R script for extracting persistent identifiers (DOIs, accession numbers,
+URLs) and repository mentions from Data Availability Statements in academic
+publications, built on top of [ODDPub](https://github.com/quest-bih/oddpub) and
+tuned for the Swedish research landscape.
 
 > ⚠️ Vibe-coded with [Claude Code](https://claude.com/claude-code). Heuristic — sanity-check the output.
 
@@ -38,7 +40,7 @@ git clone https://github.com/Princthess/Oddpub-postprocessing.git
 ## Usage
 
 - **Input:** place PDFs in `data/pdfs/`.
-- **Run:** source `oddpub-swextract.R`.
+- **Run:** source `sweddpub.R`.
 - **Output:** `data/results.csv`, one row per article.
 
 PDFs, intermediate `.txt`, and `results.csv` are git-ignored and stay local.
@@ -75,7 +77,7 @@ All original ODDPub columns are retained. Added columns:
 
 Tuned for the Swedish research landscape alongside the major international
 archives. To extend coverage, edit `repo_pattern`, `accession_pattern`, or the
-orphan-DOI prefix list near the top of `oddpub-swextract.R`.
+orphan-DOI prefix list near the top of `sweddpub.R`.
 
 **Swedish / Nordic**
 
