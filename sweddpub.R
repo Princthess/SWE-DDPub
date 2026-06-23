@@ -1,7 +1,7 @@
-# Oddpub-postprocessing: run ODDPub on PDFs in data/pdfs/ and extract DOIs,
+# SWE-DDPub: run ODDPub on PDFs in data/pdfs/ and extract DOIs,
 # accessions, URLs and repository mentions to data/results.csv.
 #
-# Setup: open Oddpub-postprocessing.Rproj in RStudio (sets the wd + activates
+# Setup: open SWE-DDPub.Rproj in RStudio (sets the wd + activates
 # renv), then run restore.R. Packages are pinned via renv — do not install them
 # manually. See README.md for details.
 
@@ -18,7 +18,7 @@ output_path <- "data/results.csv"
 # Guard against running from the wrong working directory.
 if (!file.exists("renv.lock")) {
   stop("Working directory is not the project root. Open ",
-       "Oddpub-postprocessing.Rproj in RStudio, then run this script again.")
+       "SWE-DDPub.Rproj in RStudio, then run this script again.")
 }
 dir.create(pdf_folder, recursive = TRUE, showWarnings = FALSE)
 

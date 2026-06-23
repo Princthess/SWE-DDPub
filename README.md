@@ -1,4 +1,4 @@
-# Oddpub-postprocessing
+# SWE-DDPub
 
 **SWE-DDPub** (`SWE` + `DDPub` — Swedish **D**ata **D**etection in **Pub**lications)
 is an R script for extracting persistent identifiers (DOIs, accession numbers,
@@ -32,10 +32,10 @@ Runs ODDPub on a folder of PDFs and post-processes the output to extract:
 ## Setup
 
 ```sh
-git clone https://github.com/Princthess/Oddpub-postprocessing.git
+git clone https://github.com/Princthess/SWE-DDPub.git
 ```
 
-1. Open **`Oddpub-postprocessing.Rproj`** in RStudio. This sets the working
+1. Open **`SWE-DDPub.Rproj`** in RStudio. This sets the working
    directory to the project root and activates renv.
 2. Run `restore.R` (`renv::restore()`) to install the locked package versions.
 
