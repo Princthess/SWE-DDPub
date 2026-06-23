@@ -1,6 +1,6 @@
 # Oddpub-postprocessing
 
-**SWEDDPub** (`SWE` + `DDPub` — Swedish **D**ata **D**etection in **Pub**lications)
+**SWE-DDPub** (`SWE` + `DDPub` — Swedish **D**ata **D**etection in **Pub**lications)
 is an R script for extracting persistent identifiers (DOIs, accession numbers,
 URLs) and repository mentions from Data Availability Statements in academic
 publications, built on top of [ODDPub](https://github.com/quest-bih/oddpub) and
