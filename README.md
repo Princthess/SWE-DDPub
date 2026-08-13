@@ -136,9 +136,6 @@ orphan-DOI prefix list near the top of `sweddpub.R`.
 | Bolin Centre Database | name, DOI `10.25504` |
 | ICOS Carbon Portal | name, `ICOS`, DOI `10.18160` |
 
-Most Swedish universities deposit through SND/DORIS rather than running their
-own repository, so SND coverage catches the bulk of institutional data.
-
 **International**
 
 Zenodo (`10.5281`), Figshare (`10.6084`), Dryad (`10.5061`), Mendeley Data
