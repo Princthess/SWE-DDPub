@@ -13,9 +13,12 @@ renv/staging/
 noobreadme.md
 CONTEXT.md
 
-# Data: keep the folder structure, ignore the actual PDFs, text, and results
+# Data: keep the folder structure, ignore the actual PDFs, text, results,
+# caches, and archived runs (your corpus and outputs stay local).
 data/pdfs/*
 !data/pdfs/.gitkeep
 data/*.csv
 data/*.txt
+data/*.rds
+data/archive/
 *.pdf

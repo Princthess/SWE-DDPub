@@ -25,7 +25,28 @@ dir.create(pdf_folder, recursive = TRUE, showWarnings = FALSE)
 # Convert PDFs to txt and run ODDPub
 oddpub::pdf_convert(pdf_folder, output_folder = pdf_folder)
 pdf_text <- oddpub::pdf_load(pdf_folder)
-results  <- oddpub::open_data_search(pdf_text)
+
+# ODDPub's full-text screening is the slow step (~20 s/paper) and it re-screens
+# every paper on every run. Cache its output per article so each paper is screened
+# only ONCE: re-runs and newly-added papers reuse the cache and only NEW papers get
+# screened. (Parallelising open_data_search via plan(multisession) stalled on this
+# Windows/renv setup -- 0% CPU, workers never engaged -- so we speed it up by not
+# repeating work instead. The DOI-lookup parallelism further down is unaffected.)
+# Stored as .rds to preserve exact column types. CAVEAT: keyed by filename -- if you
+# replace a PDF's *contents* but keep its name, delete data/oddpub_screen_cache.rds
+# (and the paper's .txt in data/pdfs) so it gets re-screened.
+screen_cache_path <- "data/oddpub_screen_cache.rds"
+screen_cache <- if (file.exists(screen_cache_path)) readRDS(screen_cache_path) else NULL
+done_articles <- if (!is.null(screen_cache)) screen_cache$article else character(0)
+new_articles  <- setdiff(names(pdf_text), done_articles)
+message("ODDPub screening: ", length(pdf_text), " papers, ", length(done_articles),
+        " cached, ", length(new_articles), " to screen ...")
+if (length(new_articles) > 0) {
+  new_results  <- oddpub::open_data_search(pdf_text[new_articles])
+  screen_cache <- if (is.null(screen_cache)) new_results else bind_rows(screen_cache, new_results)
+  saveRDS(screen_cache, screen_cache_path)
+}
+results <- screen_cache[screen_cache$article %in% names(pdf_text), , drop = FALSE]
 
 # ── Helper function: normalise PDF artefacts (line-break splits) ───────────────
 # Re-joins DOIs and URLs that a PDF broke across a line. The URL rejoin is
@@ -35,6 +56,10 @@ results  <- oddpub::open_data_search(pdf_text)
 # We now only rejoin when the break looks like a genuine URL continuation.
 normalize_text <- function(text) {
   text |>
+    # Normalise fancy Unicode dashes (hyphen U+2010 .. horizontal bar U+2015, and
+    # the minus sign U+2212) to a plain ASCII hyphen, so DOIs/URLs broken by a
+    # typographic dash still match/resolve. \u escapes so file encoding can't break it.
+    str_replace_all("[\u2010-\u2015\u2212]", "-") |>
     str_replace_all("\\b(10\\.?)\\s+(\\d{4,}/)", "\\1\\2") |>
     str_replace_all("(10\\.\\d{4,}/[^\\s]{2,20})\\s+([^\\s,);>\"']{3,})", "\\1\\2") |>
     # (a) first fragment ends in a URL-structural char, so a path clearly continues
@@ -189,7 +214,9 @@ results_extended <- results |>
     },
 
     # ── Repository match ──────────────────────────────────────────────────────
-    matched_repository = str_extract(tolower(source_text), repo_pattern),
+    # str_extract_all (not str_extract) so multi-dataset papers list every
+    # repository, not just the first (e.g. s00253 hits ENA + PRIDE + Figshare).
+    matched_repository = extract_all_collapse(tolower(source_text), repo_pattern),
 
     # ── Corrected is_open_data flag ───────────────────────────────────────────
     # TRUE if ODDPub already flagged it, OR a known repository is named AND:
@@ -223,3 +250,250 @@ write.csv(results_extended, output_path, row.names = FALSE)
 message("Done! Results saved to: ", output_path)
 message("Added columns: extracted_doi, extracted_accession, extracted_url, ",
         "matched_repository, is_open_data_corrected")
+
+
+# ==============================================================================
+# LIST-FREE DATASET ENRICHMENT   (added 2026-08-05; run in RStudio, needs internet)
+# ------------------------------------------------------------------------------
+# For every DOI in the FULL paper text, ask doi.org what it is. Keep the ones
+# that come back as a dataset/software; use the returned metadata for a clean
+# repository name + title + license + creators; then tag each as the authors'
+# OWN data (named in the availability section, or a creator surname matches the
+# paper's author block) vs REUSED (a cited third-party dataset).
+#
+# This does NOT need a hand-maintained list of repositories: whether a link is a
+# dataset is answered by the DOI's own registration (DataCite/Crossref), so it
+# works for any repository worldwide, including small/domain-specific ones.
+#
+# One-time setup in RStudio:  renv::install(c("httr","jsonlite")); renv::snapshot()
+# Writes a NEW file (data/results_datasets.csv); leaves results.csv untouched.
+# ==============================================================================
+library(httr)
+library(jsonlite)
+
+`%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
+
+contact_email <- "therese.tikkanen@chalmers.se"   # polite User-Agent for the DOI APIs
+doi_ua <- user_agent(paste0("SWE-DDPub (mailto:", contact_email, ")"))
+
+# Look up ONE doi via doi.org content negotiation (works for Crossref AND
+# DataCite). Always returns a 1-row data.frame incl. http_status + type so the
+# diagnostic log can show WHY a DOI was kept or dropped. type = NA => dropped.
+lookup_doi <- function(doi) {
+  out <- data.frame(doi = doi, http_status = NA_integer_, type = NA_character_,
+                    repository = NA_character_, title = NA_character_,
+                    creators = NA_character_, license = NA_character_,
+                    stringsAsFactors = FALSE)
+  res <- tryCatch(
+    GET(paste0("https://doi.org/", doi), doi_ua,
+        add_headers(Accept = "application/vnd.citationstyles.csl+json"), timeout(20)),
+    error = function(e) NULL)
+  if (is.null(res)) return(out)                       # network error: status stays NA
+  out$http_status <- status_code(res)
+  if (out$http_status != 200) return(out)             # e.g. 404 for a malformed DOI
+  m <- tryCatch(fromJSON(content(res, "text", encoding = "UTF-8"),
+                         simplifyVector = FALSE), error = function(e) NULL)
+  if (is.null(m)) return(out)
+
+  auths <- m$author
+  out$creators <- if (!is.null(auths) && length(auths) > 0)
+    paste(vapply(auths, function(a) {
+      fam <- a$family %||% a$literal %||% ""
+      giv <- a$given %||% ""
+      trimws(paste0(fam, if (nchar(giv)) paste0(", ", giv) else ""))
+    }, character(1)), collapse = "; ") else NA_character_
+
+  out$type       <- m$type %||% NA_character_
+  out$repository <- m$publisher %||% NA_character_
+  out$title      <- if (!is.null(m$title)) as.character(m$title)[1] else NA_character_
+  out$license    <- tryCatch(m$license[[1]]$URL, error = function(e) NULL) %||% NA_character_
+
+  # License is usually absent from CSL JSON. Fall back to DataCite's native format
+  # (DataCite DOIs only) and read rightsList for a licence id / URL.
+  if (is.na(out$license)) {
+    res2 <- tryCatch(
+      GET(paste0("https://doi.org/", doi), doi_ua,
+          add_headers(Accept = "application/vnd.datacite.datacite+json"), timeout(20)),
+      error = function(e) NULL)
+    if (!is.null(res2) && status_code(res2) == 200) {
+      dc <- tryCatch(fromJSON(content(res2, "text", encoding = "UTF-8"),
+                              simplifyVector = FALSE), error = function(e) NULL)
+      rl <- tryCatch(dc$rightsList, error = function(e) NULL)
+      if (!is.null(rl) && length(rl) > 0)
+        out$license <- rl[[1]]$rightsIdentifier %||% rl[[1]]$rights %||%
+                       rl[[1]]$rightsUri %||% NA_character_
+    }
+  }
+  out
+}
+
+# Per-article full text + availability text + author-block (first ~1500 chars).
+article_text <- data.frame(
+  article   = names(pdf_text),
+  full_text = vapply(pdf_text, function(x) paste(unlist(x), collapse = " "), character(1)),
+  stringsAsFactors = FALSE) |>
+  left_join(select(results, article, das, open_data_statements, cas, open_code_statements),
+            by = "article") |>
+  mutate(
+    full_text = normalize_text(full_text),
+    das_text  = normalize_text(coalesce(
+      if_else(nchar(trimws(open_data_statements)) > 0, open_data_statements, NA_character_), das)),
+    cas_text  = normalize_text(coalesce(
+      if_else(nchar(trimws(open_code_statements)) > 0, open_code_statements, NA_character_),
+      as.character(cas))),
+    header    = substr(full_text, 1, 3000))
+
+# Candidate DOIs from the FULL text (base R, no extra deps).
+# The char class now also stops at < ( [ so glued PDF junk ("<section" markers,
+# "(accessed", "(2018") never enters the DOI in the first place.
+doi_rx <- "10\\.\\d{4,}/[^\\s,);>\"'<(\\[]+"
+
+# Trim residual junk PDF extraction leaves on a DOI, otherwise it 404s. Strips
+# trailing punctuation, then a trailing glued word after a dot (".holtmann",
+# ".section") while keeping version suffixes like ".v3" (those contain a digit).
+clean_doi <- function(d) {
+  d <- str_remove(d, "[.,);>\"'\\]]+$")
+  d <- str_remove(d, "\\.[a-z]{2,}$")
+  tolower(str_trim(d))
+}
+cand <- do.call(rbind, lapply(seq_len(nrow(article_text)), function(i) {
+  txt <- article_text$full_text[i]
+  d <- clean_doi(str_extract_all(txt, doi_rx)[[1]])
+  # Also capture Zenodo "record" URLs (zenodo.org/record/12345 or /records/12345),
+  # which some papers use instead of a 10.xxxx DOI. The record id maps 1:1 to the
+  # canonical DOI 10.5281/zenodo.<id>, so it flows through the same lookup.
+  zid <- str_match_all(txt, "zenodo\\.org/records?/(\\d+)")[[1]]
+  if (nrow(zid) > 0) d <- c(d, paste0("10.5281/zenodo.", zid[, 2]))
+  d <- unique(d[str_detect(d, "^10\\.\\d{4,}/.{2,}$")])
+  if (length(d) == 0) NULL else data.frame(article = article_text$article[i], doi = d,
+                                            stringsAsFactors = FALSE)
+}))
+
+# ---- Look up each UNIQUE doi (cached across runs, fetched in parallel) --------
+# Fast BUT polite, by design:
+#  * a persistent cache (data/doi_cache.csv) means each DOI is fetched at most
+#    ONCE, ever -- re-runs and next year's batch only fetch DOIs never seen before.
+#  * only a small number of workers hit doi.org at a time (lookup_workers), plus a
+#    tiny per-call pause, so we don't flood the service or peg the CPU.
+# To go gentler/faster, lower/raise lookup_workers. Reuses lookup_doi() unchanged.
+lookup_workers <- 5           # simultaneous requests; modest on purpose
+cache_path <- "data/doi_cache.csv"
+
+unique_dois <- unique(cand$doi)
+cache <- if (file.exists(cache_path))
+  read.csv(cache_path, colClasses = "character", stringsAsFactors = FALSE) else data.frame()
+have <- if (nrow(cache)) cache$doi else character(0)
+to_lookup <- setdiff(unique_dois, have)
+message("DOIs: ", length(unique_dois), " needed, ", length(have), " already cached, ",
+        length(to_lookup), " to fetch via ", lookup_workers, " workers ...")
+
+if (length(to_lookup) > 0) {
+  library(furrr)
+  plan(multisession, workers = lookup_workers)
+  new_meta <- future_map_dfr(
+    to_lookup,
+    function(d) { Sys.sleep(0.05); lookup_doi(d) },
+    .options = furrr_options(packages = c("httr", "jsonlite"),
+                             globals = c("lookup_doi", "doi_ua", "%||%"), seed = TRUE))
+  plan(sequential)            # shut the worker processes down again
+  new_meta$http_status <- as.character(new_meta$http_status)   # stable cache column
+  cache <- bind_rows(cache, new_meta)
+  write.csv(cache, cache_path, row.names = FALSE)
+}
+
+# Assemble this run's metadata from the (now complete) cache.
+meta_tbl <- cache[match(unique_dois, cache$doi), , drop = FALSE]
+meta_tbl$http_status <- suppressWarnings(as.integer(meta_tbl$http_status))
+
+# Diagnostic: log every DOI + HTTP status + returned type so we can see WHY DOIs
+# are kept or dropped (200 + dataset/software = kept; anything else = dropped).
+diag_path <- "data/doi_lookup_log.csv"
+write.csv(meta_tbl[, c("doi", "http_status", "type", "repository")], diag_path,
+          row.names = FALSE)
+message("Wrote lookup diagnostic to: ", diag_path, "  |  ",
+        sum(meta_tbl$http_status == 200, na.rm = TRUE), " ok / ",
+        sum(is.na(meta_tbl$http_status)), " network-fail / ",
+        sum(!is.na(meta_tbl$http_status) & meta_tbl$http_status != 200), " non-200; ",
+        sum(meta_tbl$type %in% c("dataset", "software", "collection")), " typed as data.")
+
+# Keep only datasets/software (the list-free 'is it data?' filter), then tag
+# own vs reused.
+datasets <- cand |>
+  left_join(meta_tbl, by = "doi") |>
+  left_join(select(article_text, article, das_text, header), by = "article") |>
+  filter(type %in% c("dataset", "software", "collection")) |>
+  mutate(
+    in_das = !is.na(das_text) & str_detect(tolower(das_text), fixed(doi)),
+    creator_in_header = mapply(function(cr, hd) {
+      if (is.na(cr) || is.na(hd)) return(FALSE)
+      # Compare the dataset's creators to the paper's author block. Keep only
+      # "Family, Given" creators and drop comma-less ones (orgs/usernames like
+      # "ORCID", "BindingDB", "adriaat") -- those caused false "own" when the org
+      # name happened to be the paper's topic. Skip datasets with >20 such creators
+      # (big consortia / tools like Qiskit that a paper merely reused). Then ANY
+      # matching surname in the author block => the paper's own data. Using ANY
+      # creator (not just the first) catches datasets whose lead author is a
+      # co-author of the paper, e.g. replication packages.
+      people <- str_split(cr, ";\\s*")[[1]]
+      people <- people[str_detect(people, ",")]
+      if (length(people) == 0 || length(people) > 20) return(FALSE)
+      surs <- str_trim(str_extract(people, "^[^,]+"))
+      surs <- surs[nchar(surs) >= 3]
+      if (length(surs) == 0) return(FALSE)
+      any(vapply(surs, function(s) str_detect(tolower(hd), fixed(tolower(s))), logical(1)))
+    }, creators, header),
+    is_authors_own  = in_das | creator_in_header,
+    provenance      = if_else(is_authors_own, "own", "reused"),
+    source_location = if_else(in_das, "data_availability", "full_text")) |>
+  select(article, doi, provenance, source_location, resource_type = type,
+         repository, title, creators, license)
+
+# ---- #1: non-DOI identifiers (accessions + code repos) from ODDPub's DAS/CAS ----
+# ODDPub already isolated the availability statements; mining THOSE (not the whole
+# paper) keeps precision high -- an accession or github URL sitting in the data/code
+# availability statement is the paper's own by construction, so provenance = "own".
+# No DOI lookup, so title/creators/license stay NA. NOTE: for these rows the "doi"
+# column holds the accession or repo URL instead of a DOI.
+gh_rx <- "https?://(?:github|gitlab|bitbucket)\\.[a-z.]+/[^\\s,);>\"'<(\\[]+"
+accession_repo <- function(a) dplyr::case_when(
+  str_detect(a, "^PRJ")       ~ "ENA/GenBank (BioProject)",
+  str_detect(a, "^SAM")       ~ "BioSample",
+  str_detect(a, "^GSE")       ~ "GEO",
+  str_detect(a, "^PXD")       ~ "PRIDE",
+  str_detect(a, "^MTBLS")     ~ "MetaboLights",
+  str_detect(a, "^GCA_")      ~ "GenBank assembly",
+  str_detect(a, "^SR[PRXSZ]") ~ "SRA",
+  str_detect(a, "^EGA")       ~ "EGA",
+  str_detect(a, "^S-BSST")    ~ "BioStudies",
+  str_detect(a, "-[A-Z]{4}-") ~ "ArrayExpress",
+  TRUE                        ~ NA_character_)
+
+extra <- do.call(rbind, lapply(seq_len(nrow(article_text)), function(i) {
+  art <- article_text$article[i]
+  das <- article_text$das_text[i]; cas <- article_text$cas_text[i]
+  mk <- function(id, loc, rtype, repo) data.frame(
+    article = art, doi = id, provenance = "own", source_location = loc,
+    resource_type = rtype, repository = repo, title = NA_character_,
+    creators = NA_character_, license = NA_character_, stringsAsFactors = FALSE)
+  rows <- list()
+  # accession numbers in the DATA statement (reuse the existing accession_pattern)
+  acc <- if (!is.na(das)) toupper(unique(unlist(
+    str_extract_all(das, regex(accession_pattern, ignore_case = TRUE))))) else character(0)
+  for (a in acc) rows[[length(rows) + 1]] <- mk(a, "data_availability", "accession", accession_repo(a))
+  # code-hosting URLs (github/gitlab/bitbucket) in either statement, de-duplicated
+  both <- paste(c(if (!is.na(cas)) cas, if (!is.na(das)) das), collapse = " ")
+  urls <- unique(str_remove(unlist(str_extract_all(both, gh_rx)), "[.,);>\"'\\]/]+$"))
+  urls <- urls[nchar(urls) > 0]
+  for (u in urls) rows[[length(rows) + 1]] <-
+    mk(u, "code_availability", "code", str_to_title(str_extract(u, "(?<=//)(?:www\\.)?[a-z]+")))
+  if (length(rows) == 0) NULL else do.call(rbind, rows)
+}))
+if (!is.null(extra) && nrow(extra) > 0) datasets <- bind_rows(datasets, extra)
+
+datasets_path <- "data/results_datasets.csv"
+write.csv(datasets, datasets_path, row.names = FALSE)
+message("Wrote per-dataset table to: ", datasets_path, " (", nrow(datasets), " rows). ",
+        sum(datasets$provenance == "own"), " own / ",
+        sum(datasets$provenance == "reused"), " reused; incl. ",
+        sum(datasets$resource_type == "accession"), " accession + ",
+        sum(datasets$resource_type == "code"), " code (non-DOI).")
