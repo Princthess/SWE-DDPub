@@ -48,6 +48,13 @@ if (length(new_articles) > 0) {
 }
 results <- screen_cache[screen_cache$article %in% names(pdf_text), , drop = FALSE]
 
+# Vanilla ODDPub output (its native columns only, no post-processing) written to
+# its own file for side-by-side comparison with the enriched results below. This
+# is `results` before we add any columns, so it costs no extra run time.
+write.csv(results, "data/results_oddpub_vanilla.csv", row.names = FALSE)
+message("Wrote vanilla ODDPub output to: data/results_oddpub_vanilla.csv (",
+        nrow(results), " papers)")
+
 # ── Helper function: normalise PDF artefacts (line-break splits) ───────────────
 # Re-joins DOIs and URLs that a PDF broke across a line. The URL rejoin is
 # deliberately conservative: an earlier version glued ANY whitespace after a URL
@@ -244,12 +251,10 @@ results_extended <- results |>
   ) |>
   select(-source_text_raw)
 
-# ── Save output ────────────────────────────────────────────────────────────────
-write.csv(results_extended, output_path, row.names = FALSE)
-
-message("Done! Results saved to: ", output_path)
-message("Added columns: extracted_doi, extracted_accession, extracted_url, ",
-        "matched_repository, is_open_data_corrected")
+# NOTE: results.csv is written at the very END of this script, as ONE merged table
+# (article-level flags + per-dataset detail). `results_extended` is still computed
+# here because the enrichment below reuses its `is_open_data_corrected` flag and
+# `das`/`cas` handling. Raw ODDPub columns live in data/results_oddpub_vanilla.csv.
 
 
 # ==============================================================================
@@ -266,7 +271,8 @@ message("Added columns: extracted_doi, extracted_accession, extracted_url, ",
 # works for any repository worldwide, including small/domain-specific ones.
 #
 # One-time setup in RStudio:  renv::install(c("httr","jsonlite")); renv::snapshot()
-# Writes a NEW file (data/results_datasets.csv); leaves results.csv untouched.
+# The per-dataset rows built here are merged with the article-level flags at the
+# end of the script and written together to data/results.csv.
 # ==============================================================================
 library(httr)
 library(jsonlite)
@@ -490,10 +496,23 @@ extra <- do.call(rbind, lapply(seq_len(nrow(article_text)), function(i) {
 }))
 if (!is.null(extra) && nrow(extra) > 0) datasets <- bind_rows(datasets, extra)
 
-datasets_path <- "data/results_datasets.csv"
-write.csv(datasets, datasets_path, row.names = FALSE)
-message("Wrote per-dataset table to: ", datasets_path, " (", nrow(datasets), " rows). ",
-        sum(datasets$provenance == "own"), " own / ",
-        sum(datasets$provenance == "reused"), " reused; incl. ",
-        sum(datasets$resource_type == "accession"), " accession + ",
-        sum(datasets$resource_type == "code"), " code (non-DOI).")
+# ---- Merge into ONE output (results.csv): article-level flags + dataset detail --
+# One row per dataset, with each paper's article-level flags repeated. Papers with
+# NO dataset get a single row with the dataset columns blank, so the full set of
+# screened papers -- the monitoring denominator -- stays countable. Heavy raw text
+# (ODDPub's das/statements) is NOT repeated here; it lives in the vanilla file.
+article_flags <- results_extended |>
+  select(article, is_open_data, open_data_category, is_reuse, is_open_code,
+         is_open_data_corrected)
+
+merged <- article_flags |>
+  left_join(datasets, by = "article")
+
+write.csv(merged, output_path, row.names = FALSE)
+message("Done! Wrote ", output_path, ": ", nrow(merged), " rows across ",
+        nrow(article_flags), " papers (", length(unique(datasets$article)),
+        " with >=1 dataset). Datasets: ",
+        sum(datasets$provenance == "own", na.rm = TRUE), " own / ",
+        sum(datasets$provenance == "reused", na.rm = TRUE), " reused; incl. ",
+        sum(datasets$resource_type == "accession", na.rm = TRUE), " accession + ",
+        sum(datasets$resource_type == "code", na.rm = TRUE), " code (non-DOI).")

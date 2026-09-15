@@ -14,17 +14,9 @@ title, creators and licence — and to judge whether a dataset is the authors'
 
 ## What it does
 
-Runs ODDPub on a folder of PDFs, then produces **two** outputs:
+Runs ODDPub on a folder of PDFs, then writes **two** files:
 
-**`results.csv` — one row per article** (ODDPub's detection + post-processing):
-
-- `is_open_data` / open-data category, plus a corrected flag that catches cases
-  ODDPub misses
-- DOIs (incl. reconstruction of DOIs split across two-column layouts), accession
-  numbers and non-DOI URLs found in the availability statement
-- Repository name matched from a known list
-
-**`results_datasets.csv` — one row per dataset** (the enrichment layer):
+**`results.csv` — the enriched result, one row per dataset:**
 
 - Every DOI in the full text, looked up against DataCite/Crossref so only real
   **datasets / software** are kept — no hand-maintained repository list needed,
@@ -34,6 +26,12 @@ Runs ODDPub on a folder of PDFs, then produces **two** outputs:
 - **`provenance`** — whether the dataset is the authors' **own** or **reused**
 - Non-DOI identifiers too (accession numbers, GitHub/GitLab repos) mined from
   ODDPub's data/code availability statements
+- Each row also carries the paper's article-level flags (`is_open_data`, the
+  corrected flag, …). Papers with **no** dataset still appear as one blank-dataset
+  row, so the full set of screened papers stays countable (your denominator).
+
+**`results_oddpub_vanilla.csv` — raw ODDPub output**, its native columns only, for
+side-by-side comparison with the enriched result.
 
 ## Requirements
 
@@ -60,8 +58,8 @@ git clone https://github.com/Princthess/SWE-DDPub.git
 
 - **Input:** place PDFs in `data/pdfs/`.
 - **Run:** source `sweddpub.R`.
-- **Output:** `data/results.csv` (one row per article) and
-  `data/results_datasets.csv` (one row per dataset).
+- **Output:** `data/results.csv` (enriched, one row per dataset) and
+  `data/results_oddpub_vanilla.csv` (raw ODDPub, for comparison).
 
 PDFs, intermediate `.txt`, outputs, and caches are git-ignored and stay local.
 
@@ -89,19 +87,17 @@ everything under `data/` except `.gitkeep` (your corpus and outputs).
 
 ## Output columns
 
-### `results.csv` (one row per article)
+### `results.csv` (enriched — one row per dataset)
 
-All original ODDPub columns are retained. Added columns:
+Article-level flags, repeated on each of a paper's rows:
 
 | Column | Description |
 |---|---|
-| `extracted_doi` | DOI found in the availability statement (includes split-DOI reconstruction) |
-| `extracted_accession` | Accession number found in the availability statement |
-| `extracted_url` | Non-DOI URL found in the availability statement |
-| `matched_repository` | Repository name matched from a known list |
+| `is_open_data` / `open_data_category` | ODDPub's open-data verdict and category |
+| `is_reuse` / `is_open_code` | ODDPub reuse / open-code flags |
 | `is_open_data_corrected` | Corrected open-data flag (extends ODDPub's detection) |
 
-### `results_datasets.csv` (one row per dataset)
+Dataset-level columns:
 
 | Column | Description |
 |---|---|
@@ -112,9 +108,15 @@ All original ODDPub columns are retained. Added columns:
 | `repository` | Repository name from the DOI's metadata (inferred for accessions) |
 | `title` / `creators` / `license` | From the DOI's DataCite/Crossref metadata (blank for non-DOI rows) |
 
+Papers with no dataset appear as a single row with the dataset columns blank.
 `provenance` is inferred: a dataset named in the availability statement, or whose
 creators overlap the paper's authors, is `own`; otherwise `reused`. It's a
 heuristic — a strong hint, not ground truth.
+
+### `results_oddpub_vanilla.csv` (raw ODDPub — one row per article)
+
+ODDPub's native output, unmodified (`is_open_data`, `open_data_category`, the
+`das`/`cas` statement text, etc.) — a baseline to compare against `results.csv`.
 
 ## Repositories & identifiers covered
 
@@ -122,10 +124,10 @@ Tuned for the Swedish research landscape alongside the major international
 archives. To extend coverage, edit `repo_pattern`, `accession_pattern`, or the
 orphan-DOI prefix list near the top of `sweddpub.R`.
 
-> These lists drive the `matched_repository` column in **`results.csv`**. The
-> **`results_datasets.csv`** layer does **not** rely on them — it identifies
-> datasets by asking DataCite/Crossref what each DOI is, so it covers any
-> repository, including ones not listed here.
+> These lists drive ODDPub's own detection and the internal repository match. The
+> enriched **`results.csv`** does **not** rely on them — it identifies datasets by
+> asking DataCite/Crossref what each DOI is, so it covers any repository, including
+> ones not listed here.
 
 **Swedish / Nordic**
 
